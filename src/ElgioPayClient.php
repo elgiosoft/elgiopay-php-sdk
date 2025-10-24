@@ -236,6 +236,62 @@ class ElgioPayClient
     }
 
     /**
+     * Get account balance
+     */
+    public function getBalance(): array
+    {
+        try {
+            $response = $this->client->get('/api/v1/balance');
+
+            return json_decode($response->getBody()->getContents(), true);
+        } catch (GuzzleException $e) {
+            throw new ElgioPayException('Failed to get balance: ' . $e->getMessage(), $e->getCode(), $e);
+        }
+    }
+
+    /**
+     * Get all payouts
+     */
+    public function getPayouts(): array
+    {
+        try {
+            $response = $this->client->get('/api/v1/payouts');
+
+            return json_decode($response->getBody()->getContents(), true);
+        } catch (GuzzleException $e) {
+            throw new ElgioPayException('Failed to get payouts: ' . $e->getMessage(), $e->getCode(), $e);
+        }
+    }
+
+    /**
+     * Create a payout
+     */
+    public function createPayout(array $payoutData): array
+    {
+        try {
+            $response = $this->client->post('/api/v1/payouts', ['json' => $payoutData]);
+
+            return json_decode($response->getBody()->getContents(), true);
+        } catch (GuzzleException $e) {
+            throw new ElgioPayException('Payout creation failed: ' . $e->getMessage(), $e->getCode(), $e);
+        }
+    }
+
+    /**
+     * Get payout status
+     */
+    public function getPayoutStatus(string $payoutId): array
+    {
+        try {
+            $response = $this->client->get("/api/v1/payouts/{$payoutId}");
+
+            return json_decode($response->getBody()->getContents(), true);
+        } catch (GuzzleException $e) {
+            throw new ElgioPayException('Failed to get payout status: ' . $e->getMessage(), $e->getCode(), $e);
+        }
+    }
+
+    /**
      * Set custom timeout
      */
     public function setTimeout(int $timeout): self
@@ -264,7 +320,7 @@ class ElgioPayClient
                 return $sandboxUrl ?: 'https://sandbox-api.elgiopay.com';
             case 'prod':
             default:
-                return 'http://api.elgiopay.test';
+                return 'http://api.elgiopay.com';
         }
     }
 }
