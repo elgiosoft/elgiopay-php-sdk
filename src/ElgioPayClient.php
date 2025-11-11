@@ -320,7 +320,7 @@ class ElgioPayClient
                 return $sandboxUrl ?: 'https://sandbox-api.elgiopay.com';
             case 'prod':
             default:
-                return 'http://api.elgiopay.com';
+                return 'https://api.elgiopay.com';
         }
     }
 }
