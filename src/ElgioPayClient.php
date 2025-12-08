@@ -187,6 +187,62 @@ class ElgioPayClient
         throw $lastException;
     }
 
+    public function getBilling(){
+        try {
+            $response = $this->client->get("/api/v1/bills");
+
+            return json_decode($response->getBody()->getContents(), true);
+        } catch (GuzzleException $e) {
+            throw new ElgioPayException('Failed to get Billing list: ' . $e->getMessage(), $e->getCode(), $e);
+        }
+    }
+
+    public function checkBilling(array $billData){
+        try {
+            $response = $this->client->post("/api/v1/bills/get-bill", [
+                'json' => $billData
+            ]);
+            return json_decode($response->getBody()->getContents(), true);
+        }
+        catch (GuzzleException $e) {
+            throw new ElgioPayException('Failed to get Billing list: ' . $e->getMessage(), $e->getCode(), $e);
+        }
+
+    }
+
+    public function payBilling(array $billData){
+         try {
+            $response = $this->client->post('/api/v1/bills/pay', [
+                'json' => $billData
+            ]);
+
+            return json_decode($response->getBody()->getContents(), true);
+        } catch (GuzzleException $e) {
+            throw new ElgioPayException('Failed to pay bills: ' . $e->getMessage(), $e->getCode(), $e);
+        }
+    }
+
+    /**
+     * @param array{
+     * amount: int, 
+     * currency: string, 
+     * payout_method: string, 
+     * recipient_phone: string, 
+     * recipient_name: string, 
+     * description: string
+     * } $payoutData
+     */
+    public function createPayout(array $payoutData){
+        try{
+            $response = $this->client->post('/api/v1/payouts', [
+                'json' => $payoutData
+            ]);
+        }
+        catch (GuzzleException $e){
+            throw new ElgioPayException('Failed to create payouts: '. $e->getMessage(), $e->getCode(), $e); 
+        }
+    }
+
     /**
      * Set custom timeout
      */
@@ -212,7 +268,7 @@ class ElgioPayClient
     {
         switch ($environment) {
             case 'sandbox':
-                return 'https://sandbox-api.elgiopay.com';
+                return env('ELGIOPAY_SANDBOX_URL', 'https://sandbox-api.elgiopay.com');
             case 'prod':
             default:
                 return 'https://api.elgiopay.com';
