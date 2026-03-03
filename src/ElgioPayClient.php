@@ -346,6 +346,26 @@ class ElgioPayClient
         }
     }
 
+
+    /** 
+     * Services
+     */
+
+    /**
+     * SMS service
+     * @param string phoneNumber
+     * @param string message
+     */
+    public function sendSMS($phoneNumber, $message){
+        try{
+            $response = $this->client->post('/api/v1/services/sms/send', ['json' => ['to' => $phoneNumber, 'message' => $message]]);
+            return json_decode($response->getBody()->getContents(), true);
+        } catch(GuzzleException $e){
+            throw new ElgioPayException('Failed to send SMS: ' . $e->getMessage(), $e->getCode(), $e);
+        }
+
+    }
+
     /**
      * Set custom timeout
      */
