@@ -4,6 +4,7 @@ namespace ElgioPay\SDK;
 
 use GuzzleHttp\Client;
 use GuzzleHttp\Exception\GuzzleException;
+use GuzzleHttp\Exception\RequestException;
 
 class ElgioPayClient
 {
@@ -29,7 +30,7 @@ class ElgioPayClient
         
         $this->baseUrl = $this->getBaseUrl($this->environment);
         
-        $this->client = app(Client::class, [
+        $this->client = new Client([
             'base_uri' => $this->baseUrl,
             'headers' => [
                 'Authorization' => 'Bearer ' . $this->apiKey,
@@ -47,13 +48,28 @@ class ElgioPayClient
     {
         try {
             // Validate required fields
+            if(empty($paymentData['payment_method'])){
+                $paymentData['payment_method'] = $this->detectPaymentMethod($paymentData['customer_phone']);
+            }
             $this->validatePaymentData($paymentData);
 
             $response = $this->client->post('/api/v1/payments', ['json' => $paymentData]);
 
             return json_decode($response->getBody()->getContents(), true);
-        } catch (GuzzleException $e) {
-            throw new ElgioPayException('Payment initiation failed: ' . $e->getMessage(), $e->getCode(), $e);
+        } catch (RequestException $e) {
+            $responseData = null;
+            $message = $e->getMessage();
+
+            if ($e->hasResponse()) {
+                $body = $e->getResponse()->getBody()->getContents();
+                $responseData = json_decode($body, true);
+
+                $message =
+                    $responseData['message']
+                    ?? $responseData['error']
+                    ?? $message;
+            }
+            throw new ElgioPayException($message, $e->getCode(), $e, $responseData);
         }
     }
 
@@ -72,6 +88,10 @@ class ElgioPayClient
 
         if (!is_numeric($paymentData['amount']) || $paymentData['amount'] <= 0) {
             throw new ElgioPayException('Amount must be a positive number');
+        }
+
+        if($paymentData['amount'] > 1000000){
+            throw new ElgioPayException("Amount cannot be greater than 1,000,000");
         }
 
         if (!in_array($paymentData['payment_method'], [PaymentMethod::MTN_MOBILE_MONEY->value, PaymentMethod::ORANGE_MONEY->value])) {
