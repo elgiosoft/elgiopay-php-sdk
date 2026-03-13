@@ -296,8 +296,21 @@ class ElgioPayClient
             ]);
 
             return json_decode($response->getBody()->getContents(), true);
-        } catch (GuzzleException $e) {
-            throw new ElgioPayException('Failed to pay bills: ' . $e->getMessage(), $e->getCode(), $e);
+        } 
+        catch (RequestException $e) {
+            $responseData = null;
+            $message = $e->getMessage();
+
+            if ($e->hasResponse()) {
+                $body = $e->getResponse()->getBody()->getContents();
+                $responseData = json_decode($body, true);
+
+                $message =
+                    $responseData['message']
+                    ?? $responseData['error']
+                    ?? $message;
+            }
+            throw new ElgioPayException($message, $e->getCode(), $e, $responseData);
         }
     }
 
@@ -347,8 +360,21 @@ class ElgioPayClient
             $response = $this->client->post('/api/v1/payouts', ['json' => $payoutData]);
 
             return json_decode($response->getBody()->getContents(), true);
-        } catch (GuzzleException $e) {
-            throw new ElgioPayException('Payout creation failed: ' . $e->getMessage(), $e->getCode(), $e);
+        } 
+        catch (RequestException $e) {
+            $responseData = null;
+            $message = $e->getMessage();
+
+            if ($e->hasResponse()) {
+                $body = $e->getResponse()->getBody()->getContents();
+                $responseData = json_decode($body, true);
+
+                $message =
+                    $responseData['message']
+                    ?? $responseData['error']
+                    ?? $message;
+            }
+            throw new ElgioPayException($message, $e->getCode(), $e, $responseData);
         }
     }
 
