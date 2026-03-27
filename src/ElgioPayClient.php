@@ -3,8 +3,8 @@
 namespace ElgioPay\SDK;
 
 use GuzzleHttp\Client;
-use GuzzleHttp\Exception\GuzzleException;
 use GuzzleHttp\Exception\RequestException;
+use Symfony\Component\HttpFoundation\Request;
 
 class ElgioPayClient
 {
@@ -57,19 +57,7 @@ class ElgioPayClient
 
             return json_decode($response->getBody()->getContents(), true);
         } catch (RequestException $e) {
-            $responseData = null;
-            $message = $e->getMessage();
-
-            if ($e->hasResponse()) {
-                $body = $e->getResponse()->getBody()->getContents();
-                $responseData = json_decode($body, true);
-
-                $message =
-                    $responseData['message']
-                    ?? $responseData['error']
-                    ?? $message;
-            }
-            throw new ElgioPayException($message, $e->getCode(), $e, $responseData);
+            $this->catchException($e); 
         }
     }
 
@@ -108,8 +96,8 @@ class ElgioPayClient
             $response = $this->client->get("/api/v1/payments/{$transactionId}");
 
             return json_decode($response->getBody()->getContents(), true);
-        } catch (GuzzleException $e) {
-            throw new ElgioPayException('Failed to get payment status: ' . $e->getMessage(), $e->getCode(), $e);
+        } catch (RequestException $e) {
+            $this->catchException($e);
         }
     }
 
@@ -122,8 +110,8 @@ class ElgioPayClient
             $response = $this->client->post("/api/v1/payments/{$transactionId}/verify");
 
             return json_decode($response->getBody()->getContents(), true);
-        } catch (GuzzleException $e) {
-            throw new ElgioPayException('Payment verification failed: ' . $e->getMessage(), $e->getCode(), $e);
+        } catch (RequestException $e) {
+            $this->catchException($e); 
         }
     }
 
@@ -260,8 +248,8 @@ class ElgioPayClient
             $response = $this->client->get("/api/v1/bills");
 
             return json_decode($response->getBody()->getContents(), true);
-        } catch (GuzzleException $e) {
-            throw new ElgioPayException('Failed to get Billing list: ' . $e->getMessage(), $e->getCode(), $e);
+        } catch (RequestException $e) {
+            $this->catchException($e);
         }
     }
 
@@ -272,8 +260,8 @@ class ElgioPayClient
             ]);
             return json_decode($response->getBody()->getContents(), true);
         }
-        catch (GuzzleException $e) {
-            throw new ElgioPayException('Failed to get Billing list: ' . $e->getMessage(), $e->getCode(), $e);
+        catch (RequestException $e) {
+            $this->catchException($e);
         }
 
     }
@@ -298,19 +286,7 @@ class ElgioPayClient
             return json_decode($response->getBody()->getContents(), true);
         } 
         catch (RequestException $e) {
-            $responseData = null;
-            $message = $e->getMessage();
-
-            if ($e->hasResponse()) {
-                $body = $e->getResponse()->getBody()->getContents();
-                $responseData = json_decode($body, true);
-
-                $message =
-                    $responseData['message']
-                    ?? $responseData['error']
-                    ?? $message;
-            }
-            throw new ElgioPayException($message, $e->getCode(), $e, $responseData);
+            $this->catchException($e);
         }
     }
 
@@ -324,8 +300,8 @@ class ElgioPayClient
             $response = $this->client->get('/api/v1/balance');
 
             return json_decode($response->getBody()->getContents(), true);
-        } catch (GuzzleException $e) {
-            throw new ElgioPayException('Failed to get balance: ' . $e->getMessage(), $e->getCode(), $e);
+        } catch (RequestException $e) {
+            $this->catchException($e);
         }
     }
 
@@ -338,8 +314,8 @@ class ElgioPayClient
             $response = $this->client->get('/api/v1/payouts');
 
             return json_decode($response->getBody()->getContents(), true);
-        } catch (GuzzleException $e) {
-            throw new ElgioPayException('Failed to get payouts: ' . $e->getMessage(), $e->getCode(), $e);
+        } catch (RequestException $e) {
+            $this->catchException($e);
         }
     }
 
@@ -362,19 +338,7 @@ class ElgioPayClient
             return json_decode($response->getBody()->getContents(), true);
         } 
         catch (RequestException $e) {
-            $responseData = null;
-            $message = $e->getMessage();
-
-            if ($e->hasResponse()) {
-                $body = $e->getResponse()->getBody()->getContents();
-                $responseData = json_decode($body, true);
-
-                $message =
-                    $responseData['message']
-                    ?? $responseData['error']
-                    ?? $message;
-            }
-            throw new ElgioPayException($message, $e->getCode(), $e, $responseData);
+            $this->catchException($e);
         }
     }
 
@@ -387,8 +351,25 @@ class ElgioPayClient
             $response = $this->client->get("/api/v1/payouts/{$payoutId}");
 
             return json_decode($response->getBody()->getContents(), true);
-        } catch (GuzzleException $e) {
-            throw new ElgioPayException('Failed to get payout status: ' . $e->getMessage(), $e->getCode(), $e);
+        } catch (RequestException $e) {
+            $this->catchException($e);
+        }
+    }
+
+
+    /**
+     * Validate recipient
+     * @param string phoneNumber
+     */
+    public function validateRecipient($phoneNumber){
+        try{
+            $response = $this->client->post("/api/v1/validate-recipient", ['json' => [
+                'recipient' => $phoneNumber
+            ]]);
+
+            return json_decode($response->getBody()->getContents(), true);
+        } catch(RequestException $e){
+            $this->catchException($e);
         }
     }
 
@@ -406,8 +387,8 @@ class ElgioPayClient
         try{
             $response = $this->client->post('/api/v1/services/sms/send', ['json' => ['to' => $phoneNumber, 'message' => $message]]);
             return json_decode($response->getBody()->getContents(), true);
-        } catch(GuzzleException $e){
-            throw new ElgioPayException('Failed to send SMS: ' . $e->getMessage(), $e->getCode(), $e);
+        } catch(RequestException $e){
+            $this->catchException($e);
         }
 
     }
@@ -443,5 +424,21 @@ class ElgioPayClient
             default:
                 return 'https://api.elgiopay.com';
         }
+    }
+
+    private function catchException(RequestException $e){
+        $responseData = null;
+        $message = $e->getMessage();
+
+        if ($e->hasResponse()) {
+            $body = $e->getResponse()->getBody()->getContents();
+            $responseData = json_decode($body, true);
+
+            $message =
+                $responseData['message']
+                ?? $responseData['error']
+                ?? $message;
+        }
+        throw new ElgioPayException($message, $e->getCode(), $e, $responseData);
     }
 }
