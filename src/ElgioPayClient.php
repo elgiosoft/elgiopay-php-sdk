@@ -2,16 +2,20 @@
 
 namespace ElgioPay\SDK;
 
+use ElgioPay\SDK\Resources\Card\CardClient;
+use ElgioPay\SDK\BaseClient;
 use GuzzleHttp\Client;
 use GuzzleHttp\Exception\RequestException;
-use Symfony\Component\HttpFoundation\Request;
 
-class ElgioPayClient
+class ElgioPayClient extends BaseClient
 {
-    private Client $client;
+    protected ?CardClient $cardClient = null;
+
     private string $apiKey;
     private string $baseUrl;
+    
     private string $environment;
+    public Client $client;
 
     public function __construct(?string $environment = null, ?string $apiKey = null)
     {
@@ -205,12 +209,12 @@ class ElgioPayClient
 
             // Check first 2-3 digits to determine carrier
             // MTN patterns: 67x, 650, 651, 652, 653, 654
-            if (preg_match('/^(67|650|651|652|653|654)/', $number)) {
+            if (preg_match('/^(67|650|651|652|653|654|680|681|682|683|684|684)/', $number)) {
                 return PaymentMethod::MTN_MOBILE_MONEY->value;
             }
 
             // Orange patterns: 69x, 655, 656, 657, 658, 659
-            if (preg_match('/^(69|655|656|657|658|659)/', $number)) {
+            if (preg_match('/^(69|655|656|657|658|659|685|686|687|688|689)/', $number)) {
                 return PaymentMethod::ORANGE_MONEY->value;
             }
         }
@@ -393,6 +397,14 @@ class ElgioPayClient
 
     }
 
+    public function cards(){
+        if ($this->cardClient === null) {
+            $this->cardClient = new CardClient($this);
+        }
+
+        return $this->cardClient;
+    }
+
     /**
      * Set custom timeout
      */
@@ -409,36 +421,5 @@ class ElgioPayClient
         ]);
 
         return $this;
-    }
-
-    /**
-     * Get base URL based on environment
-     */
-    private function getBaseUrl(string $environment): string
-    {
-        switch ($environment) {
-            case 'sandbox':
-                $sandboxUrl = $_ENV['ELGIOPAY_SANDBOX_URL'] ?? getenv('ELGIOPAY_SANDBOX_URL');
-                return $sandboxUrl ?: 'https://sandbox-api.elgiopay.com';
-            case 'prod':
-            default:
-                return 'https://api.elgiopay.com';
-        }
-    }
-
-    private function catchException(RequestException $e){
-        $responseData = null;
-        $message = $e->getMessage();
-
-        if ($e->hasResponse()) {
-            $body = $e->getResponse()->getBody()->getContents();
-            $responseData = json_decode($body, true);
-
-            $message =
-                $responseData['message']
-                ?? $responseData['error']
-                ?? $message;
-        }
-        throw new ElgioPayException($message, $e->getCode(), $e, $responseData);
     }
 }
