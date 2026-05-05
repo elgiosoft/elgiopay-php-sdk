@@ -18,8 +18,7 @@
     },
     "autoload": {
         "psr-4": {
-            "ElgioPay\\SDK\\": "src/",
-            "ElgioPay\\SDK\\Resources": "src/Resources"
+            "ElgioPay\\SDK\\": "src/"
         }
     },
     "autoload-dev": {
