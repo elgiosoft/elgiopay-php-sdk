@@ -2,15 +2,20 @@
 
 namespace ElgioPay\SDK;
 
+use ElgioPay\SDK\Resources\Card\CardClient;
+use ElgioPay\SDK\BaseClient;
 use GuzzleHttp\Client;
-use GuzzleHttp\Exception\GuzzleException;
+use GuzzleHttp\Exception\RequestException;
 
-class ElgioPayClient
+class ElgioPayClient extends BaseClient
 {
-    private Client $client;
+    protected ?CardClient $cardClient = null;
+
     private string $apiKey;
     private string $baseUrl;
+    
     private string $environment;
+    public Client $client;
 
     public function __construct(?string $environment = null, ?string $apiKey = null)
     {
@@ -47,13 +52,16 @@ class ElgioPayClient
     {
         try {
             // Validate required fields
+            if(empty($paymentData['payment_method'])){
+                $paymentData['payment_method'] = $this->detectPaymentMethod($paymentData['customer_phone']);
+            }
             $this->validatePaymentData($paymentData);
 
             $response = $this->client->post('/api/v1/payments', ['json' => $paymentData]);
 
             return json_decode($response->getBody()->getContents(), true);
-        } catch (GuzzleException $e) {
-            throw new ElgioPayException('Payment initiation failed: ' . $e->getMessage(), $e->getCode(), $e);
+        } catch (RequestException $e) {
+            $this->catchException($e); 
         }
     }
 
@@ -74,6 +82,10 @@ class ElgioPayClient
             throw new ElgioPayException('Amount must be a positive number');
         }
 
+        if($paymentData['amount'] > 1000000){
+            throw new ElgioPayException("Amount cannot be greater than 1,000,000");
+        }
+
         if (!in_array($paymentData['payment_method'], [PaymentMethod::MTN_MOBILE_MONEY->value, PaymentMethod::ORANGE_MONEY->value])) {
             throw new ElgioPayException('Invalid payment method');
         }
@@ -88,8 +100,8 @@ class ElgioPayClient
             $response = $this->client->get("/api/v1/payments/{$transactionId}");
 
             return json_decode($response->getBody()->getContents(), true);
-        } catch (GuzzleException $e) {
-            throw new ElgioPayException('Failed to get payment status: ' . $e->getMessage(), $e->getCode(), $e);
+        } catch (RequestException $e) {
+            $this->catchException($e);
         }
     }
 
@@ -102,8 +114,8 @@ class ElgioPayClient
             $response = $this->client->post("/api/v1/payments/{$transactionId}/verify");
 
             return json_decode($response->getBody()->getContents(), true);
-        } catch (GuzzleException $e) {
-            throw new ElgioPayException('Payment verification failed: ' . $e->getMessage(), $e->getCode(), $e);
+        } catch (RequestException $e) {
+            $this->catchException($e); 
         }
     }
 
@@ -197,12 +209,12 @@ class ElgioPayClient
 
             // Check first 2-3 digits to determine carrier
             // MTN patterns: 67x, 650, 651, 652, 653, 654
-            if (preg_match('/^(67|650|651|652|653|654)/', $number)) {
+            if (preg_match('/^(67|650|651|652|653|654|680|681|682|683|684|684)/', $number)) {
                 return PaymentMethod::MTN_MOBILE_MONEY->value;
             }
 
             // Orange patterns: 69x, 655, 656, 657, 658, 659
-            if (preg_match('/^(69|655|656|657|658|659)/', $number)) {
+            if (preg_match('/^(69|655|656|657|658|659|685|686|687|688|689)/', $number)) {
                 return PaymentMethod::ORANGE_MONEY->value;
             }
         }
@@ -235,6 +247,54 @@ class ElgioPayClient
         throw $lastException;
     }
 
+    public function getBilling(){
+        try {
+            $response = $this->client->get("/api/v1/bills");
+
+            return json_decode($response->getBody()->getContents(), true);
+        } catch (RequestException $e) {
+            $this->catchException($e);
+        }
+    }
+
+    public function checkBilling(array $billData){
+        try {
+            $response = $this->client->post("/api/v1/bills/get-bill", [
+                'json' => $billData
+            ]);
+            return json_decode($response->getBody()->getContents(), true);
+        }
+        catch (RequestException $e) {
+            $this->catchException($e);
+        }
+
+    }
+
+    /**
+     * Pay Bills 
+     * 
+     * @param array{
+     *  service_code: string, 
+     *  account_number: string, 
+     *  amount: string, 
+     *  customer_phone: string, 
+     *  item_id: optional
+     * } $billData
+     */
+    public function payBilling(array $billData){
+         try {
+            $response = $this->client->post('/api/v1/bills/pay', [
+                'json' => $billData
+            ]);
+
+            return json_decode($response->getBody()->getContents(), true);
+        } 
+        catch (RequestException $e) {
+            $this->catchException($e);
+        }
+    }
+
+
     /**
      * Get account balance
      */
@@ -244,8 +304,8 @@ class ElgioPayClient
             $response = $this->client->get('/api/v1/balance');
 
             return json_decode($response->getBody()->getContents(), true);
-        } catch (GuzzleException $e) {
-            throw new ElgioPayException('Failed to get balance: ' . $e->getMessage(), $e->getCode(), $e);
+        } catch (RequestException $e) {
+            $this->catchException($e);
         }
     }
 
@@ -258,13 +318,21 @@ class ElgioPayClient
             $response = $this->client->get('/api/v1/payouts');
 
             return json_decode($response->getBody()->getContents(), true);
-        } catch (GuzzleException $e) {
-            throw new ElgioPayException('Failed to get payouts: ' . $e->getMessage(), $e->getCode(), $e);
+        } catch (RequestException $e) {
+            $this->catchException($e);
         }
     }
 
     /**
      * Create a payout
+     * @param array{
+     * amount: int, 
+     * currency: string, 
+     * payout_method: string, 
+     * recipient_phone: string, 
+     * recipient_name: string, 
+     * description: string
+     * } $payoutData
      */
     public function createPayout(array $payoutData): array
     {
@@ -272,8 +340,9 @@ class ElgioPayClient
             $response = $this->client->post('/api/v1/payouts', ['json' => $payoutData]);
 
             return json_decode($response->getBody()->getContents(), true);
-        } catch (GuzzleException $e) {
-            throw new ElgioPayException('Payout creation failed: ' . $e->getMessage(), $e->getCode(), $e);
+        } 
+        catch (RequestException $e) {
+            $this->catchException($e);
         }
     }
 
@@ -286,9 +355,54 @@ class ElgioPayClient
             $response = $this->client->get("/api/v1/payouts/{$payoutId}");
 
             return json_decode($response->getBody()->getContents(), true);
-        } catch (GuzzleException $e) {
-            throw new ElgioPayException('Failed to get payout status: ' . $e->getMessage(), $e->getCode(), $e);
+        } catch (RequestException $e) {
+            $this->catchException($e);
         }
+    }
+
+
+    /**
+     * Validate recipient
+     * @param string phoneNumber
+     */
+    public function validateRecipient($phoneNumber){
+        try{
+            $response = $this->client->post("/api/v1/validate-recipient", ['json' => [
+                'recipient' => $phoneNumber
+            ]]);
+
+            return json_decode($response->getBody()->getContents(), true);
+        } catch(RequestException $e){
+            $this->catchException($e);
+        }
+    }
+
+
+    /** 
+     * Services
+     */
+
+    /**
+     * SMS service
+     * @param string phoneNumber
+     * @param string message
+     */
+    public function sendSMS($phoneNumber, $message){
+        try{
+            $response = $this->client->post('/api/v1/services/sms/send', ['json' => ['to' => $phoneNumber, 'message' => $message]]);
+            return json_decode($response->getBody()->getContents(), true);
+        } catch(RequestException $e){
+            $this->catchException($e);
+        }
+
+    }
+
+    public function cards(){
+        if ($this->cardClient === null) {
+            $this->cardClient = new CardClient($this);
+        }
+
+        return $this->cardClient;
     }
 
     /**
@@ -307,20 +421,5 @@ class ElgioPayClient
         ]);
 
         return $this;
-    }
-
-    /**
-     * Get base URL based on environment
-     */
-    private function getBaseUrl(string $environment): string
-    {
-        switch ($environment) {
-            case 'sandbox':
-                $sandboxUrl = $_ENV['ELGIOPAY_SANDBOX_URL'] ?? getenv('ELGIOPAY_SANDBOX_URL');
-                return $sandboxUrl ?: 'https://sandbox-api.elgiopay.com';
-            case 'prod':
-            default:
-                return 'https://api.elgiopay.com';
-        }
     }
 }
