@@ -214,7 +214,7 @@ class ElgioPayClient extends BaseClient
             }
 
             // Orange patterns: 69x, 655, 656, 657, 658, 659
-            if (preg_match('/^(69|655|656|657|658|659|685|686|687|688|689)/', $number)) {
+            if (preg_match('/^(69|64|655|656|657|658|659|685|686|687|688|689)/', $number)) {
                 return PaymentMethod::ORANGE_MONEY->value;
             }
         }
@@ -387,9 +387,9 @@ class ElgioPayClient extends BaseClient
      * @param string phoneNumber
      * @param string message
      */
-    public function sendSMS($phoneNumber, $message){
+    public function sendSMS($phoneNumber, $message, $channels = ['sms']){
         try{
-            $response = $this->client->post('/api/v1/services/sms/send', ['json' => ['to' => $phoneNumber, 'message' => $message]]);
+            $response = $this->client->post('/api/v1/services/sms/send', ['json' => ['to' => $phoneNumber, 'message' => $message, 'channels' => $channels]]);
             return json_decode($response->getBody()->getContents(), true);
         } catch(RequestException $e){
             $this->catchException($e);
