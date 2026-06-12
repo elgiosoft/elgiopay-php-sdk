@@ -3,6 +3,7 @@
 namespace ElgioPay\SDK;
 
 use ElgioPay\SDK\Resources\Card\CardClient;
+use ElgioPay\SDK\Resources\Issuing\IssuingClient;
 use ElgioPay\SDK\BaseClient;
 use GuzzleHttp\Client;
 use GuzzleHttp\Exception\RequestException;
@@ -10,6 +11,7 @@ use GuzzleHttp\Exception\RequestException;
 class ElgioPayClient extends BaseClient
 {
     protected ?CardClient $cardClient = null;
+    protected ?IssuingClient $issuingClient = null;
 
     private string $apiKey;
     private string $baseUrl;
@@ -403,6 +405,19 @@ class ElgioPayClient extends BaseClient
         }
 
         return $this->cardClient;
+    }
+
+    /**
+     * Card issuing API (virtual card issuance, cardholder management,
+     * spending controls, balance, history).
+     */
+    public function issuing(): IssuingClient
+    {
+        if ($this->issuingClient === null) {
+            $this->issuingClient = new IssuingClient($this);
+        }
+
+        return $this->issuingClient;
     }
 
     /**

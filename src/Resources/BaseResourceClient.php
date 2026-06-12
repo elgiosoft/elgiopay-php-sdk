@@ -13,12 +13,6 @@ abstract class BaseResourceClient extends BaseClient {
 
     public function get(string $url){
         return $this->baseClient->client->get($url);
-        try {
-            $response = $this->post('/api/v1/card-payment/process', ['json' => $paymentData]);
-            return json_decode($response->getBody()->getContents(), true);
-        } catch (RequestException $e) {
-            $this->catchException($e); 
-        }
     }
 
     public function post(string $url, array $params){
