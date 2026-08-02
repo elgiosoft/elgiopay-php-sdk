@@ -161,66 +161,6 @@ class ElgioPayClient extends BaseClient
     }
 
     /**
-     * Shortcut for MTN Mobile Money. Sets `payment_method` and defaults
-     * `currency` to XAF; everything else follows {@see initiatePayment()}.
-     */
-    public function createMTNPayment(array $paymentData): array
-    {
-        $paymentData['payment_method'] = PaymentMethod::MTN_MOBILE_MONEY->value;
-        $paymentData['currency'] = $paymentData['currency'] ?? 'XAF';
-
-        return $this->initiatePayment($paymentData);
-    }
-
-    /**
-     * Shortcut for Orange Money. Sets `payment_method` and defaults
-     * `currency` to XAF; everything else follows {@see initiatePayment()}.
-     */
-    public function createOrangePayment(array $paymentData): array
-    {
-        $paymentData['payment_method'] = PaymentMethod::ORANGE_MONEY->value;
-        $paymentData['currency'] = $paymentData['currency'] ?? 'XAF';
-
-        return $this->initiatePayment($paymentData);
-    }
-
-    /**
-     * Cameroon convenience: pins currency to XAF and normalises the phone
-     * to `+237XXXXXXXX` before forwarding to {@see initiatePayment()}.
-     */
-    public function createCameroonPayment(array $paymentData): array
-    {
-        // Normalize Cameroon phone number
-        if (isset($paymentData['customer_phone'])) {
-            $paymentData['customer_phone'] = $this->normalizeCameroonPhone($paymentData['customer_phone']);
-        }
-
-        $paymentData['currency'] = 'XAF';
-
-        return $this->initiatePayment($paymentData);
-    }
-
-    /**
-     * MTN + Cameroon convenience — combines {@see createMTNPayment()} and
-     * {@see createCameroonPayment()} in one call.
-     */
-    public function createMTNCameroonPayment(array $paymentData): array
-    {
-        $paymentData['payment_method'] = PaymentMethod::MTN_MOBILE_MONEY->value;
-        return $this->createCameroonPayment($paymentData);
-    }
-
-    /**
-     * Orange + Cameroon convenience — combines {@see createOrangePayment()}
-     * and {@see createCameroonPayment()} in one call.
-     */
-    public function createOrangeCameroonPayment(array $paymentData): array
-    {
-        $paymentData['payment_method'] = PaymentMethod::ORANGE_MONEY->value;
-        return $this->createCameroonPayment($paymentData);
-    }
-
-    /**
      * Return the phone in canonical `+237XXXXXXXX` form. Accepts input
      * with spaces, dashes, `237` prefix, `+237` prefix, or none — anything
      * unrecognised is returned untouched (server-side validation catches it).

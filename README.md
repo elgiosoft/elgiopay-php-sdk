@@ -78,85 +78,89 @@ $client = new ElgioPayClient('pk_test_your_api_key', 'sandbox');
 $client = new ElgioPayClient('pk_live_your_api_key', 'prod');
 ```
 
-### Create MTN Mobile Money Payment (Cameroon)
+### Creating a payment
+
+Every payment — MTN, Orange, current markets and any we add later —
+goes through a single method: `initiatePayment()`. Pick the
+`payment_method` you need and pass the payload.
+
+```php
+// Signature
+$client->initiatePayment(array $paymentData): array
+
+// Payload shape
+// [
+//     'amount'          => float,
+//     'currency'        => string,   // 'XAF' | 'XOF' | 'EUR' | 'USD'
+//     'payment_method'  => string,   // 'mtn_mobile_money' | 'orange_money'
+//     'customer_phone'  => string,   // E.164, e.g. '+237677123456'
+//     'customer_name'   => string,   // optional
+//     'customer_email'  => string,   // optional
+//     'reference'       => string,   // optional
+//     'metadata'        => array,    // optional
+//     'surcharge'       => float,    // optional — SURCHARGE wallet add-on
+// ]
+```
+
+#### MTN Mobile Money (Cameroon)
 
 ```php
 try {
-    // Cameroon-optimized method with XAF currency
-    $result = $client->createMTNCameroonPayment(
-        amount: 1000.00,
-        customerPhone: '+237677123456', // or '677123456'
-        options: [
-            'customer_name' => 'John Doe',
-            'customer_email' => 'john@example.com',
-            'reference' => 'ORDER-123',
-            'metadata' => [
-                'order_id' => 123,
-                'product' => 'Premium Plan'
-            ]
-        ]
-    );
+    $result = $client->initiatePayment([
+        'amount'         => 1000.00,
+        'currency'       => 'XAF',
+        'payment_method' => 'mtn_mobile_money',
+        'customer_phone' => '+237677123456',
+        'customer_name'  => 'John Doe',
+        'customer_email' => 'john@example.com',
+        'reference'      => 'ORDER-123',
+        'metadata'       => [
+            'order_id' => 123,
+            'product'  => 'Premium Plan',
+        ],
+    ]);
 
     echo "Transaction ID: " . $result['transaction_id'];
     echo "Status: " . $result['status'];
-} catch (\Sofi\SDK\SofiException $e) {
+} catch (\ElgioPay\SDK\ElgioPayException $e) {
     echo "Payment failed: " . $e->getMessage();
 }
 ```
 
-### Create MTN Mobile Money Payment (Legacy)
+#### Orange Money (Cameroon)
 
 ```php
 try {
-    $result = $client->createMTNPayment(
-        amount: 1000.00,
-        customerPhone: '+237677123456',
-        options: [
-            'currency' => 'XAF', // Now defaults to XAF
-            'customer_name' => 'John Doe',
-            'reference' => 'ORDER-123'
-        ]
-    );
-} catch (\Sofi\SDK\SofiException $e) {
-    echo "Payment failed: " . $e->getMessage();
-}
-```
-
-### Create Orange Money Payment (Cameroon)
-
-```php
-try {
-    // Cameroon-optimized method with XAF currency
-    $result = $client->createOrangeCameroonPayment(
-        amount: 5000.00,
-        customerPhone: '+237677123456', // or '677123456'
-        options: [
-            'customer_name' => 'Jane Doe',
-            'reference' => 'INV-456'
-        ]
-    );
+    $result = $client->initiatePayment([
+        'amount'         => 5000.00,
+        'currency'       => 'XAF',
+        'payment_method' => 'orange_money',
+        'customer_phone' => '+237677123456',
+        'customer_name'  => 'Jane Doe',
+        'reference'      => 'INV-456',
+    ]);
 
     echo "Payment URL: " . $result['payment_url'];
-} catch (\Sofi\SDK\SofiException $e) {
+} catch (\ElgioPay\SDK\ElgioPayException $e) {
     echo "Payment failed: " . $e->getMessage();
 }
 ```
 
-### Create Orange Money Payment (Legacy)
+#### Normalising Cameroon phone numbers
+
+If your customer input arrives in mixed formats (`677…`, `237…`,
+`+237…`), pipe it through `normalizeCameroonPhone()` before calling
+`initiatePayment()`.
 
 ```php
-try {
-    $result = $client->createOrangePayment(
-        amount: 5000.00,
-        customerPhone: '+237677123456',
-        options: [
-            'currency' => 'XAF', // Now defaults to XAF
-            'reference' => 'INV-456'
-        ]
-    );
-} catch (\Sofi\SDK\SofiException $e) {
-    echo "Payment failed: " . $e->getMessage();
-}
+$phone = $client->normalizeCameroonPhone('677123456'); // → +237677123456
+
+$result = $client->initiatePayment([
+    'amount'         => 1000.00,
+    'currency'       => 'XAF',
+    'payment_method' => 'mtn_mobile_money',
+    'customer_phone' => $phone,
+]);
 ```
 
 ### Check Payment Status
@@ -224,29 +228,28 @@ try {
 ## Quick Start for Cameroon
 
 ```php
-use Sofi\SDK\ElgioPayClient;
+use ElgioPay\SDK\ElgioPayClient;
 
-// Initialize with your Sofi API key
 $client = new ElgioPayClient('pk_test_your_api_key', 'sandbox');
 
 // Simple MTN payment in XAF
-$result = $client->createMTNCameroonPayment(
-    amount: 5000.00, // 5000 XAF
-    customerPhone: '677123456',
-    options: [
-        'customer_name' => 'Jean Dupont',
-        'reference' => 'FACTURE-001'
-    ]
-);
+$result = $client->initiatePayment([
+    'amount'         => 5000.00, // 5000 XAF
+    'currency'       => 'XAF',
+    'payment_method' => 'mtn_mobile_money',
+    'customer_phone' => $client->normalizeCameroonPhone('677123456'),
+    'customer_name'  => 'Jean Dupont',
+    'reference'      => 'FACTURE-001',
+]);
 
-// Simple Orange payment in XAF  
-$result = $client->createOrangeCameroonPayment(
-    amount: 2500.00, // 2500 XAF
-    customerPhone: '+237677123456',
-    options: [
-        'reference' => 'CMD-002'
-    ]
-);
+// Simple Orange payment in XAF
+$result = $client->initiatePayment([
+    'amount'         => 2500.00, // 2500 XAF
+    'currency'       => 'XAF',
+    'payment_method' => 'orange_money',
+    'customer_phone' => '+237677123456',
+    'reference'      => 'CMD-002',
+]);
 ```
 
 ## Configuration
@@ -332,7 +335,12 @@ Use sandbox API keys (starting with `pk_test_`) for testing. All sandbox transac
 $client = new ElgioPayClient('pk_test_your_sandbox_key', 'sandbox');
 
 // Test payment
-$result = $client->createMTNCameroonPayment(1000.00, '677123456');
+$result = $client->initiatePayment([
+    'amount'         => 1000.00,
+    'currency'       => 'XAF',
+    'payment_method' => 'mtn_mobile_money',
+    'customer_phone' => '+237677123456',
+]);
 ```
 
 ### Getting API Keys
