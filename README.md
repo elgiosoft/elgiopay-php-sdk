@@ -1,9 +1,9 @@
 # ElgioPay PHP SDK
 
-[![Latest Stable Version](https://poser.pugx.org/elgiosoft/sofipayments-sdk/v)](https://packagist.org/packages/elgiosoft/sofipayments-sdk)
-[![Total Downloads](https://poser.pugx.org/elgiosoft/sofipayments-sdk/downloads)](https://packagist.org/packages/elgiosoft/sofipayments-sdk)
-[![License](https://poser.pugx.org/elgiosoft/sofipayments-sdk/license)](https://packagist.org/packages/elgiosoft/sofipayments-sdk)
-[![PHP Version Require](https://poser.pugx.org/elgiosoft/sofipayments-sdk/require/php)](https://packagist.org/packages/elgiosoft/sofipayments-sdk)
+[![Latest Stable Version](https://poser.pugx.org/elgiosoft/elgiopay-php-sdk/v)](https://packagist.org/packages/elgiosoft/elgiopay-php-sdk)
+[![Total Downloads](https://poser.pugx.org/elgiosoft/elgiopay-php-sdk/downloads)](https://packagist.org/packages/elgiosoft/elgiopay-php-sdk)
+[![License](https://poser.pugx.org/elgiosoft/elgiopay-php-sdk/license)](https://packagist.org/packages/elgiosoft/elgiopay-php-sdk)
+[![PHP Version Require](https://poser.pugx.org/elgiosoft/elgiopay-php-sdk/require/php)](https://packagist.org/packages/elgiosoft/elgiopay-php-sdk)
 
 PHP SDK for integrating with the ElgioPay API. Optimized for mobile money payments in Cameroon and West Africa.
 
@@ -68,14 +68,16 @@ $client = new ElgioPayClient();
 
 #### Manual Configuration
 
+Constructor signature: `new ElgioPayClient(?string $environment = null, ?string $apiKey = null)`. Both fall back to `ELGIOPAY_ENV` / `ELGIOPAY_API_KEY` env vars when omitted.
+
 ```php
 use ElgioPay\SDK\ElgioPayClient;
 
 // For testing (sandbox)
-$client = new ElgioPayClient('pk_test_your_api_key', 'sandbox');
+$client = new ElgioPayClient('sandbox', 'pk_test_your_api_key');
 
 // For production (live)
-$client = new ElgioPayClient('pk_live_your_api_key', 'prod');
+$client = new ElgioPayClient('prod', 'pk_live_your_api_key');
 ```
 
 ### Creating a payment
@@ -171,7 +173,7 @@ try {
     
     echo "Status: " . $status['status'];
     echo "Amount: " . $status['amount'];
-} catch (\Sofi\SDK\SofiException $e) {
+} catch (\ElgioPay\SDK\ElgioPayException $e) {
     echo "Status check failed: " . $e->getMessage();
 }
 ```
@@ -187,7 +189,7 @@ try {
     } else {
         echo "Payment verification failed.";
     }
-} catch (\Sofi\SDK\SofiException $e) {
+} catch (\ElgioPay\SDK\ElgioPayException $e) {
     echo "Verification failed: " . $e->getMessage();
 }
 ```
@@ -204,7 +206,7 @@ try {
     ], maxRetries: 3);
     
     echo "Payment created: " . $result['transaction_id'];
-} catch (\Sofi\SDK\SofiException $e) {
+} catch (\ElgioPay\SDK\ElgioPayException $e) {
     echo "Payment failed after retries: " . $e->getMessage();
 }
 ```
@@ -230,7 +232,7 @@ try {
 ```php
 use ElgioPay\SDK\ElgioPayClient;
 
-$client = new ElgioPayClient('pk_test_your_api_key', 'sandbox');
+$client = new ElgioPayClient('sandbox', 'pk_test_your_api_key');
 
 // Simple MTN payment in XAF
 $result = $client->initiatePayment([
@@ -258,45 +260,43 @@ $result = $client->initiatePayment([
 
 You only need two things to get started:
 
-1. **API Key**: Get your API key from the Sofi dashboard
+1. **API Key**: Get your API key from the ElgioPay dashboard
 2. **Environment**: Choose between sandbox (testing) or live (production)
 
 ```php
 // Sandbox environment (for testing)
-$client = new ElgioPayClient('pk_test_your_sandbox_api_key', 'sandbox');
+$client = new ElgioPayClient('sandbox', 'pk_test_your_sandbox_api_key');
 
 // Live environment (for production) 
-$client = new ElgioPayClient('pk_live_your_live_api_key', 'prod');
+$client = new ElgioPayClient('prod', 'pk_live_your_live_api_key');
 ```
 
 ### Environment Variables (Recommended)
 
 ```env
 # For testing
-SOFI_API_KEY=pk_test_your_sandbox_api_key
-SOFI_BASE_URL=https://sandbox-api.sofipayments.com
+ELGIOPAY_API_KEY=pk_test_your_sandbox_api_key
+ELGIOPAY_ENV=sandbox
 
 # For production
-SOFI_API_KEY=pk_live_your_live_api_key  
-SOFI_BASE_URL=https://api.sofipayments.com
+ELGIOPAY_API_KEY=pk_live_your_live_api_key
+ELGIOPAY_ENV=prod
 ```
 
-Then in your code:
+Then in your code — both are picked up automatically:
+
 ```php
-$client = new ElgioPayClient(
-    env('SOFI_API_KEY'),
-    env('SOFI_BASE_URL')
-);
+$client = new ElgioPayClient();
 ```
 
 ## Error Handling
 
-The SDK throws `SofiException` for all API-related errors:
+The SDK throws `ElgioPayException` for all API-related errors:
 
 ```php
 try {
     $result = $client->initiatePayment($paymentData);
-} catch (\Sofi\SDK\SofiException $e) {
+} catch (\ElgioPay\SDK\ElgioPayException $e) {
     $errorMessage = $e->getMessage();
     $errorCode = $e->getCode();
     $responseData = $e->getResponse(); // API response if available
@@ -332,7 +332,7 @@ Use sandbox API keys (starting with `pk_test_`) for testing. All sandbox transac
 
 ```php
 // Testing setup
-$client = new ElgioPayClient('pk_test_your_sandbox_key', 'sandbox');
+$client = new ElgioPayClient('sandbox', 'pk_test_your_sandbox_key');
 
 // Test payment
 $result = $client->initiatePayment([
@@ -345,7 +345,7 @@ $result = $client->initiatePayment([
 
 ### Getting API Keys
 
-1. Sign up at [Sofi Dashboard](https://dashboard.sofipayments.com)
+1. Sign up at [sandbox.elgiopay.com](https://sandbox.elgiopay.com)
 2. Create a new application 
 3. Copy your API keys:
    - `pk_test_...` for testing
@@ -361,10 +361,10 @@ All sandbox payments will automatically succeed after a few seconds.
 
 ## Support
 
-- 📖 **Documentation**: [https://docs.sofipayments.com](https://docs.sofipayments.com)
-- 🐛 **Issues**: [GitHub Issues](https://github.com/elgiosoft/sofipayments-sdk/issues)
+- 📖 **Documentation**: [https://docs.elgiopay.com](https://docs.elgiopay.com)
+- 🐛 **Issues**: [GitHub Issues](https://github.com/elgiosoft/elgiopay-php-sdk/issues)
 - 💬 **Support**: [developers@elgiosoft.com](mailto:developers@elgiosoft.com)
-- 🌐 **Website**: [https://sofipayments.com](https://sofipayments.com)
+- 🌐 **Website**: [https://elgiopay.com](https://elgiopay.com)
 
 ## Contributing
 
@@ -376,4 +376,4 @@ MIT License - see the [LICENSE](LICENSE) file for details.
 
 ## About Elgiosoft
 
-Sofi Payment SDK is developed by [Elgiosoft Ltd](https://elgiosoft.com), a leading fintech company specializing in mobile money solutions for Africa.
+ElgioPay PHP SDK is developed by [Elgiosoft Ltd](https://elgiosoft.com), a leading fintech company specializing in mobile money solutions for Africa.
