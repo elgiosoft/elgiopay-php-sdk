@@ -11,11 +11,12 @@ use GuzzleHttp\Exception\RequestException;
  * This covers virtual-card *issuance* — cardholder creation, card
  * lifecycle, spending controls, balance, and history. It is distinct
  * from the existing CardClient (Resources/Card), which is for card
- * *acceptance* (Stripe payment widget).
+ * *acceptance* (accepting card payments from customers).
  *
- * Routing to the upstream provider (Stripe Issuing or SwyChr) is
- * decided server-side per app via App::card_issuing_processor; clients
- * always talk to Elgiopay's normalised surface.
+ * The upstream card provider is selected server-side per app; clients
+ * always talk to Elgiopay's normalised surface. Some fields on the
+ * request payloads only apply to specific provider variants — see the
+ * `product` note below and each method's docblock.
  *
  * Usage:
  *
@@ -33,7 +34,7 @@ use GuzzleHttp\Exception\RequestException;
  *
  *   $card = $issuing->createCard([
  *       'cardholder_id' => $cardholder['data']['id'],
- *       'product' => 'prepaid_debit',   // SwyChr-specific
+ *       'product' => 'prepaid_debit',   // provider-variant specific
  *       'amount' => 50,
  *   ]);
  *
@@ -138,11 +139,14 @@ class IssuingClient extends BaseResourceClient
     /**
      * Issue a card.
      *
-     * Body fields are processor-aware:
-     *   - SwyChr requires `product` (lite|prepaid_credit|prepaid_debit|contactless),
-     *     `amount`, and optional `card_type` (VISA|MASTERCARD). For `contactless`,
-     *     `daily_limit` and `transaction_limit` are also accepted.
-     *   - Stripe Issuing uses `currency`, optional `spending_controls`,
+     * Body fields depend on the app's configured card provider variant.
+     * A quick summary of the two variants:
+     *
+     *   - Prepaid variant: requires `product` (lite|prepaid_credit|
+     *     prepaid_debit|contactless), `amount`, and optional `card_type`
+     *     (VISA|MASTERCARD). For `contactless`, `daily_limit` and
+     *     `transaction_limit` are also accepted.
+     *   - Credit variant: uses `currency`, optional `spending_controls`,
      *     and `type` (defaults to 'virtual').
      *
      * @param CardInput $data
@@ -220,11 +224,12 @@ class IssuingClient extends BaseResourceClient
     }
 
     /**
-     * Update card spending controls.
+     * Update card spending controls. Which fields are honoured depends
+     * on the app's card-provider variant:
      *
-     *   - Stripe Issuing accepts `allowed_categories`, `blocked_categories`,
-     *     `spending_limits` (Stripe MCC controls).
-     *   - SwyChr-backed cards only honour daily / per-transaction limits;
+     *   - Credit variant: accepts `allowed_categories`,
+     *     `blocked_categories`, `spending_limits` (MCC-based controls).
+     *   - Prepaid variant: only honours daily / per-transaction limits;
      *     pass `daily_limit` + `transaction_limit` keys for that path.
      *
      * @param int|string $cardId
@@ -251,17 +256,21 @@ class IssuingClient extends BaseResourceClient
     }
 
     /**
-     * Create a Stripe ephemeral key for client-side PAN reveal.
-     * Stripe-only — returns HTTP 500 (with a NOT_SUPPORTED error) for
-     * SwyChr-backed cards.
+     * Create an ephemeral key for client-side PAN reveal. Only supported
+     * on the credit-variant provider — returns HTTP 500 (with a
+     * NOT_SUPPORTED error) on the prepaid variant.
      *
-     * @param int|string $cardId
-     * @param string|null $stripeVersion Forwarded as the Stripe-Version header
+     * @param int|string  $cardId
+     * @param string|null $apiVersion Optional version pin for the
+     *     client-side card-reveal library. You shouldn't normally need
+     *     to set this — the server picks a sensible default.
      * @return array{success: bool, data: array{ephemeral_key: EphemeralKey}}
      */
-    public function createEphemeralKey(string|int $cardId, ?string $stripeVersion = null): array
+    public function createEphemeralKey(string|int $cardId, ?string $apiVersion = null): array
     {
-        $extraHeaders = $stripeVersion !== null ? ['Stripe-Version' => $stripeVersion] : [];
+        // Header name is fixed by the upstream card-reveal library's wire
+        // contract and must be forwarded verbatim — do not rename.
+        $extraHeaders = $apiVersion !== null ? ['Stripe-Version' => $apiVersion] : [];
         return $this->postWithHeaders(self::PREFIX . '/cards/' . $cardId . '/ephemeral-key', [], $extraHeaders);
     }
 
@@ -283,8 +292,9 @@ class IssuingClient extends BaseResourceClient
 
     /**
      * Top up a card from the calling app's `AppBalance` of the matching
-     * currency. The app balance is debited synchronously; SwyChr-backed
-     * cards also have their provider balance funded.
+     * currency. The app balance is debited synchronously; on the
+     * prepaid-variant provider the card's upstream balance is also
+     * funded as part of the same call.
      *
      * @param int|string $cardId
      * @param int $amount Amount in minor units (e.g. cents).

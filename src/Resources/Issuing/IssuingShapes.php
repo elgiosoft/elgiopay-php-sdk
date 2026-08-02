@@ -109,10 +109,14 @@ namespace ElgioPay\SDK\Resources\Issuing;
  *     country: string|null,
  * }
  *
+ * Note: `processor` and `external_id` are intentionally NOT exposed on
+ * response shapes — the API scrubs them so merchants don't couple to
+ * whichever underlying provider (SwyChr / Stripe / …) elgiopay routes
+ * through. The `id` and `uuid` are the merchant-facing identifiers.
+ *
  * @phpstan-type Cardholder array{
  *     id: int,
- *     processor: 'stripe'|'swychr',
- *     external_id: string,
+ *     uuid: string,
  *     merchant_user_id: string|null,
  *     type: 'individual'|'company',
  *     name: string,
@@ -133,8 +137,7 @@ namespace ElgioPay\SDK\Resources\Issuing;
  *
  * @phpstan-type Card array{
  *     id: int,
- *     processor: 'stripe'|'swychr',
- *     external_id: string,
+ *     uuid: string,
  *     type: 'virtual'|'physical',
  *     brand: string|null,
  *     last4: string|null,
@@ -143,10 +146,10 @@ namespace ElgioPay\SDK\Resources\Issuing;
  *     exp_year: int|null,
  *     expiry_date: string,
  *     currency: string|null,
- *     balance: int,
+ *     balance: float,
  *     balance_currency: string|null,
  *     formatted_balance: string,
- *     status: 'active'|'inactive'|'canceled',
+ *     status: 'active'|'inactive'|'canceled'|'pending'|'frozen'|'terminated'|'unknown',
  *     cancellation_reason: string|null,
  *     spending_controls: array<string, mixed>|null,
  *     pin_blocked: bool,
@@ -161,8 +164,8 @@ namespace ElgioPay\SDK\Resources\Issuing;
  *
  * @phpstan-type CardBalance array{
  *     card_id: int,
- *     external_id: string,
- *     balance: int,
+ *     uuid: string,
+ *     balance: float,
  *     balance_currency: string|null,
  *     formatted_balance: string,
  * }
@@ -190,11 +193,10 @@ namespace ElgioPay\SDK\Resources\Issuing;
  *
  * @phpstan-type Authorization array{
  *     id: int,
- *     processor: 'stripe'|'swychr',
- *     external_id: string,
- *     amount: int,
+ *     uuid: string,
+ *     amount: float,
  *     formatted_amount: string,
- *     merchant_amount: int|null,
+ *     merchant_amount: float|null,
  *     currency: string,
  *     merchant_currency: string|null,
  *     status: 'pending'|'closed'|'reversed',
@@ -217,19 +219,21 @@ namespace ElgioPay\SDK\Resources\Issuing;
  *
  * @phpstan-type Transaction array{
  *     id: int,
- *     processor: 'stripe'|'swychr',
- *     external_id: string,
- *     type: 'capture'|'refund'|'cash_withdrawal'|'dispute'|'dispute_loss',
- *     amount: int,
+ *     uuid: string,
+ *     type: 'capture'|'refund'|'refund_reversal'|'cash_withdrawal'|'topup'|'card_issuance'|'dispute'|'dispute_loss',
+ *     amount: float,
+ *     amount_sign: '+'|'-',
  *     formatted_amount: string,
- *     merchant_amount: int|null,
+ *     merchant_amount: float|null,
  *     currency: string,
  *     merchant_currency: string|null,
+ *     description: string|null,
+ *     status: string|null,
+ *     balance_after_transaction: float|null,
  *     merchant_data: MerchantData,
  *     merchant_display_name: string,
  *     merchant_location: string,
  *     purchase_details: array<string, mixed>|null,
- *     balance_transaction_id: int|null,
  *     wallet: string|null,
  *     dispute_id: string|null,
  *     card_id: int,
@@ -238,6 +242,7 @@ namespace ElgioPay\SDK\Resources\Issuing;
  *     card?: Card,
  *     authorization?: Authorization,
  *     metadata: array<string, mixed>|null,
+ *     transacted_at: string|null,
  *     created_at: string,
  * }
  *
@@ -250,7 +255,8 @@ namespace ElgioPay\SDK\Resources\Issuing;
  *     month_spend: int,
  * }
  *
- * Stripe ephemeral key payload (forwarded as-is for use with Stripe.js).
+ * Ephemeral key payload (forwarded as-is for use with the client-side
+ * card-reveal library).
  *
  * @phpstan-type EphemeralKey array{
  *     id: string,
@@ -263,6 +269,31 @@ namespace ElgioPay\SDK\Resources\Issuing;
  * }
  *
  * @phpstan-type ListMeta array{total: int}
+ *
+ * ────────────────────────────────────────────────────────────────────
+ * WEBHOOK EVENTS
+ * ────────────────────────────────────────────────────────────────────
+ *
+ * Envelope every outbound webhook is wrapped in. See
+ * ElgioPay\SDK\Webhooks\WebhookSignature::verify to authenticate the
+ * request before parsing.
+ *
+ * @phpstan-type WebhookEnvelope array{
+ *     id: string,
+ *     event: string,
+ *     created: int,
+ *     data: array<string, mixed>,
+ * }
+ *
+ * Card issuing event names — use these to route the envelope's `event`
+ * to a handler. Kept as a list so IDE autocomplete surfaces them.
+ *
+ * @phpstan-type IssuingWebhookEvent 'issuing_card.created'
+ *     |'issuing_card.updated'
+ *     |'issuing_card.terminated'
+ *     |'issuing_card.expiration'
+ *     |'issuing_authorization.created'
+ *     |'issuing_transaction.created'
  */
 interface IssuingShapes
 {
