@@ -207,6 +207,22 @@ class IssuingClientTest extends MockClientTestCase
         $this->assertSame(['amount' => 100], $this->lastRequestBody());
     }
 
+    public function test_withdraw_from_card_with_description(): void
+    {
+        $this->queue(200, ['data' => []]);
+        $this->client->issuing()->withdrawFromCard(42, 5000, 'Refund unused float');
+
+        $this->assertLastRequest('POST', '/api/v1/issuing/cards/42/withdraw');
+        $this->assertSame(['amount' => 5000, 'description' => 'Refund unused float'], $this->lastRequestBody());
+    }
+
+    public function test_withdraw_from_card_without_description_omits_field(): void
+    {
+        $this->queue(200, ['data' => []]);
+        $this->client->issuing()->withdrawFromCard(42, 100);
+        $this->assertSame(['amount' => 100], $this->lastRequestBody());
+    }
+
     // ─── History ───────────────────────────────────────────────────────────
 
     public function test_list_card_transactions_passes_query(): void

@@ -320,6 +320,35 @@ class IssuingClient extends BaseResourceClient
         return $this->post(self::PREFIX . '/cards/' . $cardId . '/topup', $body);
     }
 
+    /**
+     * Pull funds off the card back to your app balance. The card is
+     * debited exactly `amount`; your app balance is credited
+     * `amount - fee`.
+     *
+     * @param int|string $cardId
+     * @param int $amount Amount in minor units (e.g. cents).
+     * @param string|null $description Optional human-readable note.
+     * @return array{
+     *     success: bool,
+     *     message: string,
+     *     data: array{
+     *         card_id: int,
+     *         balance: int,
+     *         balance_currency: string,
+     *         formatted_balance: string,
+     *         app_balance: array{available_balance: int, currency: string},
+     *     },
+     * }
+     */
+    public function withdrawFromCard(string|int $cardId, int $amount, ?string $description = null): array
+    {
+        $body = ['amount' => $amount];
+        if ($description !== null) {
+            $body['description'] = $description;
+        }
+        return $this->post(self::PREFIX . '/cards/' . $cardId . '/withdraw', $body);
+    }
+
     // ────────────────────────────────────────────────────────────
     // Cards — history
     // ────────────────────────────────────────────────────────────
