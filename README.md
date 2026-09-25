@@ -231,6 +231,16 @@ $client->initiatePayment([
     'sub_merchant_id' => $merchant['merchant_id'],
 ]);
 
+// Card charges route the same way. The card settlement hold applies to the
+// sub-merchant's ledger rather than your float.
+$client->cards()->processPayment([
+    'amount' => 100,
+    'currency' => 'USD',
+    'customer_name' => 'Marie Tchana',
+    'payment_method_id' => 'pm_123',
+    'sub_merchant_id' => $merchant['merchant_id'],
+]);
+
 // 3. Read and settle.
 $balance = $connected->getBalance($merchant['merchant_id']);
 $connected->createPayout($merchant['merchant_id'], [
