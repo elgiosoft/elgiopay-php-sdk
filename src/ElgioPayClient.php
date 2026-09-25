@@ -3,6 +3,7 @@
 namespace ElgioPay\SDK;
 
 use ElgioPay\SDK\Resources\Card\CardClient;
+use ElgioPay\SDK\Resources\ConnectedMerchants\ConnectedMerchantsClient;
 use ElgioPay\SDK\Resources\Issuing\IssuingClient;
 use ElgioPay\SDK\BaseClient;
 use GuzzleHttp\Client;
@@ -11,15 +12,17 @@ use GuzzleHttp\Exception\RequestException;
 /**
  * Main entry point to the ElgioPay API. Handles mobile-money payments,
  * payouts, balance queries, bill payments, SMS, plus sub-clients for
- * card payments and card issuing.
+ * card payments, card issuing and connected merchants.
  *
- * @see cards()    — Card payment processing
- * @see issuing()  — Virtual card issuance
+ * @see cards()               — Card payment processing
+ * @see issuing()             — Virtual card issuance
+ * @see connectedMerchants()  — Sub-merchant onboarding (platform apps)
  */
 class ElgioPayClient extends BaseClient
 {
     protected ?CardClient $cardClient = null;
     protected ?IssuingClient $issuingClient = null;
+    protected ?ConnectedMerchantsClient $connectedMerchantsClient = null;
 
     private string $apiKey;
     private string $baseUrl;
@@ -66,16 +69,27 @@ class ElgioPayClient extends BaseClient
      * When `payment_method` is omitted, it's derived from `customer_phone`
      * via {@see detectPaymentMethod()}.
      *
+     * Provide EITHER `payment_method` OR `channel_code` (a payment-channel
+     * code from `listChannels()`, e.g. `ORANGE_CMR`). When neither is given,
+     * the method is auto-detected from the phone number.
+     *
+     * Platform apps can set `sub_merchant_id` (a `merchant_id` from
+     * {@see connectedMerchants()}) to attribute the charge to a connected
+     * merchant — on completion the net amount credits that merchant's own
+     * balance instead of the app float.
+     *
      * @param array{
      *   amount: int|float,
      *   currency?: string,
      *   payment_method?: string,
+     *   channel_code?: string,
      *   customer_phone: string,
      *   customer_name?: string,
      *   customer_email?: string,
      *   reference?: string,
      *   metadata?: array<string,mixed>,
-     *   surcharge?: int|float
+     *   surcharge?: int|float,
+     *   sub_merchant_id?: string
      * } $paymentData
      *
      * @return array API response — `{success, transaction_id, status, payment_url?, message}`.
@@ -83,8 +97,10 @@ class ElgioPayClient extends BaseClient
     public function initiatePayment(array $paymentData): array
     {
         try {
-            // Validate required fields
-            if(empty($paymentData['payment_method'])){
+            // Auto-detect the legacy method from the phone ONLY when neither a
+            // method nor a channel_code was supplied. A channel_code is an
+            // alternative selector, so don't override it.
+            if (empty($paymentData['payment_method']) && empty($paymentData['channel_code'])) {
                 $paymentData['payment_method'] = $this->detectPaymentMethod($paymentData['customer_phone']);
             }
             $this->validatePaymentData($paymentData);
@@ -106,12 +122,17 @@ class ElgioPayClient extends BaseClient
      */
     private function validatePaymentData(array $paymentData): void
     {
-        $requiredFields = ['amount', 'payment_method', 'customer_phone'];
+        $requiredFields = ['amount', 'customer_phone'];
 
         foreach ($requiredFields as $field) {
             if (!isset($paymentData[$field]) || empty($paymentData[$field])) {
                 throw new ElgioPayException("Required field '{$field}' is missing or empty");
             }
+        }
+
+        // Exactly one routing selector: a legacy payment_method OR a channel_code.
+        if (empty($paymentData['payment_method']) && empty($paymentData['channel_code'])) {
+            throw new ElgioPayException('Provide either payment_method or channel_code');
         }
 
         if (!is_numeric($paymentData['amount']) || $paymentData['amount'] <= 0) {
@@ -122,7 +143,10 @@ class ElgioPayClient extends BaseClient
             throw new ElgioPayException("Amount cannot be greater than 1,000,000");
         }
 
-        if (!in_array($paymentData['payment_method'], [PaymentMethod::MTN_MOBILE_MONEY->value, PaymentMethod::ORANGE_MONEY->value])) {
+        // Only validate the legacy method against the enum when it's the one
+        // in use — a channel_code is validated server-side.
+        if (!empty($paymentData['payment_method'])
+            && !in_array($paymentData['payment_method'], [PaymentMethod::MTN_MOBILE_MONEY->value, PaymentMethod::ORANGE_MONEY->value])) {
             throw new ElgioPayException('Invalid payment method');
         }
     }
@@ -307,8 +331,37 @@ class ElgioPayClient extends BaseClient
             ]);
 
             return json_decode($response->getBody()->getContents(), true);
-        } 
+        }
         catch (RequestException $e) {
+            $this->catchException($e);
+        }
+    }
+
+    /**
+     * List the payment channels available to this app — mobile money, bills,
+     * cash-in — optionally filtered. Pass a channel's `code` as `channel_code`
+     * on {@see initiatePayment()} / {@see createPayout()}. The provider that
+     * fulfils a channel is internal and never returned.
+     *
+     * @param array{
+     *   type?: string,
+     *   direction?: string,
+     *   country?: string,
+     *   category?: string,
+     *   name?: string
+     * } $filters
+     *
+     * @return array API response — `{success, data: Channel[]}`.
+     */
+    public function listChannels(array $filters = []): array
+    {
+        try {
+            $response = $this->client->get('/api/v1/channels', [
+                'query' => $filters,
+            ]);
+
+            return json_decode($response->getBody()->getContents(), true);
+        } catch (RequestException $e) {
             $this->catchException($e);
         }
     }
@@ -359,11 +412,16 @@ class ElgioPayClient extends BaseClient
      * `bank_transfer`. The bank_* fields are only required (and only
      * consumed) when payout_method is `bank_transfer`.
      *
+     * Provide EITHER `payout_method` OR `channel_code` (a payout-capable
+     * payment-channel code from `listChannels(['direction' => 'payout'])`,
+     * e.g. `ORANGE_CMR`, `AIRTEL_GAB`).
+     *
      * @param array{
      *   amount: int|float,
      *   currency?: string,
      *   source?: string,
-     *   payout_method: string,
+     *   payout_method?: string,
+     *   channel_code?: string,
      *   recipient_phone?: string,
      *   recipient_name: string,
      *   recipient_email?: string,
@@ -472,6 +530,20 @@ class ElgioPayClient extends BaseClient
         }
 
         return $this->issuingClient;
+    }
+
+    /**
+     * Connected-merchant API — onboard sub-merchants, read their balances and
+     * pay them out. Requires a *platform* merchant AND a platform-flagged app;
+     * every call 403s with `NOT_A_PLATFORM` otherwise.
+     */
+    public function connectedMerchants(): ConnectedMerchantsClient
+    {
+        if ($this->connectedMerchantsClient === null) {
+            $this->connectedMerchantsClient = new ConnectedMerchantsClient($this);
+        }
+
+        return $this->connectedMerchantsClient;
     }
 
     /**

@@ -37,6 +37,7 @@ composer require elgiosoft/elgiopay-php-sdk
   - [Basic Setup](#basic-setup)
   - [MTN Mobile Money](#create-mtn-mobile-money-payment-cameroon)
   - [Orange Money](#create-orange-money-payment-cameroon)
+  - [Connected Merchants](#connected-merchants-platform-apps)
   - [Payment Status](#check-payment-status)
   - [Payment Verification](#verify-payment)
 - [Supported Payment Methods](#supported-payment-methods)
@@ -95,6 +96,7 @@ $client->initiatePayment(array $paymentData): array
 //     'amount'          => float,
 //     'currency'        => string,   // 'XAF' | 'XOF' | 'EUR' | 'USD'
 //     'payment_method'  => string,   // 'mtn_mobile_money' | 'orange_money'
+//     'channel_code'    => string,   // e.g. 'ORANGE_CMR' — alternative to payment_method
 //     'customer_phone'  => string,   // E.164, e.g. '+237677123456'
 //     'customer_name'   => string,   // optional
 //     'customer_email'  => string,   // optional
@@ -102,6 +104,17 @@ $client->initiatePayment(array $paymentData): array
 //     'metadata'        => array,    // optional
 //     'surcharge'       => float,    // optional — SURCHARGE wallet add-on
 // ]
+```
+
+Provide **either** `payment_method` **or** `channel_code` (a code from
+`listChannels()`). With `channel_code`, the currency comes from the channel:
+
+```php
+$result = $client->initiatePayment([
+    'amount'         => 1000,
+    'channel_code'   => 'ORANGE_CMR',
+    'customer_phone' => '+237699000000',
+]);
 ```
 
 #### MTN Mobile Money (Cameroon)
@@ -164,6 +177,102 @@ $result = $client->initiatePayment([
     'customer_phone' => $phone,
 ]);
 ```
+
+### Channels
+
+List the payment channels available to your app (mobile money, bills,
+cash-in). Pass a channel's `code` as `channel_code` on `initiatePayment()` /
+`createPayout()`. The provider that fulfils a channel is internal and never
+returned.
+
+```php
+// All channels
+$channels = $client->listChannels();
+
+// Filtered: payout-capable mobile-money channels in Cameroon
+$payoutChannels = $client->listChannels([
+    'type'      => 'mobile_money',
+    'direction' => 'payout',
+    'country'   => 'CMR',
+]);
+// $payoutChannels['data'] => [ ['code' => 'ORANGE_CMR', 'currency' => 'XAF', ...], ... ]
+
+// Filters: type, direction, country (ISO-3), category, name
+```
+
+### Connected Merchants (platform apps)
+
+If your merchant is a **platform**, you can onboard sub-merchants, charge on
+their behalf and settle them. Two things must both be true or the API answers
+`403 NOT_A_PLATFORM`: the merchant is a platform, *and* the specific app whose
+key you're using is flagged as a platform app. A platform's own storefront app
+is deliberately not one.
+
+A connected merchant lives inside exactly one app: the app whose key created
+it. There's no app parameter, and a merchant created with app A's key is
+invisible to app B's key — listing, lookup, balance, payouts and
+`sub_merchant_id` charges are all scoped to the calling app.
+
+```php
+$connected = $client->connectedMerchants();
+
+// 1. Onboard. Provide `email` plus company_name OR first_name.
+$merchant = $connected->create([
+    'email' => 'shop@example.cm',
+    'company_name' => 'Boutique Mballa',
+    'metadata' => ['external_id' => 'shop_42'],
+]);
+// => ['merchant_id' => 'mch_…', 'kyc_status' => 'pending', 'status' => 'created', ...]
+
+// 2. Charge on its behalf — the net amount credits ITS balance, not your float.
+$client->initiatePayment([
+    'amount' => 5000,
+    'customer_phone' => '+237677389120',
+    'sub_merchant_id' => $merchant['merchant_id'],
+]);
+
+// 3. Read and settle.
+$balance = $connected->getBalance($merchant['merchant_id']);
+$connected->createPayout($merchant['merchant_id'], [
+    'amount' => 4000,
+    'payout_method' => 'mtn_mobile_money',
+    'recipient_name' => 'Jean Mballa',
+    'recipient_phone' => '677389120',
+]);
+
+// Listing + lifecycle
+$page = $connected->list(['per_page' => 25]);   // ['data' => [...], 'meta' => [...]]
+$connected->get($merchant['merchant_id']);
+$connected->deactivate($merchant['merchant_id']); // freeze
+$connected->reactivate($merchant['merchant_id']);
+```
+
+Branch on the machine-readable code rather than the message:
+
+```php
+try {
+    $connected->create(['email' => 'shop@example.cm']);
+} catch (\ElgioPay\SDK\ElgioPayException $e) {
+    if (($e->getResponse()['error'] ?? null) === 'NOT_A_PLATFORM') {
+        // This app's merchant isn't a platform.
+    }
+}
+```
+
+Codes: `NOT_A_PLATFORM`, `NOT_YOUR_MERCHANT`, `MERCHANT_INACTIVE`,
+`PAYOUT_FAILED`, `VALIDATION_ERROR`, and on a charge —
+`SUB_MERCHANT_NOT_FOUND` / `_NOT_CONNECTED` / `_NOT_YOURS` / `_INACTIVE`.
+
+Webhooks (`connected_merchant.created`, `.kyc.submitted`, `.kyc.approved`,
+`.kyc.rejected`, `.payout.paid`, `.payout.failed`, `.deactivated`,
+`.reactivated`) are delivered to the **platform's** webhook URL, never the
+sub-merchant's.
+
+> **Two current limitations.** There's no hosted KYC link yet, so a
+> sub-merchant can't verify itself through the API — approval happens
+> operator-side. And `capabilities` is advisory: a merchant reporting
+> `charges_enabled: false` can still take payments, because the charge path
+> doesn't check KYC status. Don't treat it as a block.
 
 ### Check Payment Status
 
